@@ -6,33 +6,25 @@ import { authenticate, AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 
-// ✅ Register User with Role-Based Handling (Default: "USER")
+// ✅ Register User (Default Role: "USER")
 router.post("/register", async (req: Request, res: Response): Promise<any> => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
-    // ✅ Ensure unique email
+    // ✅ Check if email is unique
     const existingUser = await User.findOne({ email }).exec();
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    // ✅ Hash the password before saving
-    const hashedPassword: string = await bcrypt.hash(password, 10);
-
-    // ✅ Default all new users to "USER", unless an admin is creating an "ADMIN" account
-    let userRole = "USER";
-    if (role === "ADMIN") {
-      return res.status(403).json({
-        message: "Forbidden: Only admins can create admin accounts",
-      });
-    }
+    // ✅ Hash password before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
-      role: userRole,
+      role: "user",
     });
     await newUser.save();
 
@@ -42,16 +34,60 @@ router.post("/register", async (req: Request, res: Response): Promise<any> => {
   }
 });
 
-// ✅ Admin Creating Another Admin (Protected Route)
+// ✅ First Admin Registration (Allowed Without Token)
 router.post(
   "/register-admin",
+  async (req: Request, res: Response): Promise<any> => {
+    try {
+      const { name, email, password } = req.body;
+
+      // ✅ Check if an admin already exists
+      const existingAdmin = await User.findOne({ role: "admin" }).exec();
+
+      // ✅ If an admin exists, forbid direct registration without authentication
+      if (existingAdmin) {
+        return res.status(403).json({
+          message: "Forbidden: Only existing admins can create new admins",
+        });
+      }
+
+      // ✅ Ensure email is unique
+      const existingUser = await User.findOne({ email }).exec();
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists" });
+      }
+
+      // ✅ Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // ✅ Create new admin
+      const newAdmin = new User({
+        name,
+        email,
+        password: hashedPassword,
+        role: "admin",
+      });
+      await newAdmin.save();
+
+      return res
+        .status(201)
+        .json({ message: "First admin registered successfully" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// ✅ Register Additional Admins (Requires Admin Token)
+router.post(
+  "/register-secure-admin",
   authenticate,
   async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-      const { name, email, password, role } = req.body;
+      const { name, email, password } = req.body;
 
       // ✅ Ensure only existing admins can create new admins
-      if (!req.user || req.user.role !== "ADMIN") {
+      if (!req.user || req.user.role !== "admin") {
         return res.status(403).json({
           message: "Forbidden: Only admins can create admin accounts",
         });
@@ -64,13 +100,14 @@ router.post(
       }
 
       // ✅ Hash password
-      const hashedPassword: string = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 10);
 
+      // ✅ Create new admin
       const newAdmin = new User({
         name,
         email,
         password: hashedPassword,
-        role: "ADMIN",
+        role: "admin",
       });
       await newAdmin.save();
 
@@ -81,7 +118,7 @@ router.post(
   }
 );
 
-// ✅ Login User
+// ✅ Login User (For Users & Admins)
 router.post("/login", async (req: Request, res: Response): Promise<any> => {
   try {
     const { email, password } = req.body;
@@ -92,20 +129,15 @@ router.post("/login", async (req: Request, res: Response): Promise<any> => {
       return res.status(400).json({ message: "User not found" });
     }
 
-    // ✅ Ensure password exists & is valid
-    if (!user.password || typeof user.password !== "string") {
-      return res.status(500).json({ message: "Invalid user data" });
-    }
-
     // ✅ Compare password
-    const isMatch: boolean = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
     // ✅ Generate JWT Token
-    const token: string = jwt.sign(
-      { id: user._id, role: user.role || "USER" },
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET as string,
       { expiresIn: "1d" }
     );
