@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import mongoose from "mongoose";
 import authRoutes from "./routes/auth.js";
+import flightRoutes from "./routes/flights.js";
 
 //typescript enforces prope environment variable types
 dotenv.config();
@@ -25,6 +26,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/flights", flightRoutes);
 
 //Typescript ensures that PORT is always a number
 const PORT: number = Number(process.env.PORT) || 5000;

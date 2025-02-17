@@ -6,20 +6,23 @@ import User from "../models/User.js"; // ✅ Removed .js
 const router = Router();
 
 // ✅ Register User with enforced input types
-router.post("/register", async (req: Request, res: Response) => {
-  const { name, email, password } = req.body;
+router.post(
+  "/register",
+  async (req: Request, res: Response): Promise<Response> => {
+    const { name, email, password } = req.body;
 
-  // ✅ TypeScript ensures the return type of hashing is a string
-  const hashedPassword: string = await bcrypt.hash(password, 10);
+    // ✅ TypeScript ensures the return type of hashing is a string
+    const hashedPassword: string = await bcrypt.hash(password, 10);
 
-  try {
-    const user = new User({ name, email, password: hashedPassword });
-    await user.save();
-    res.status(201).json({ message: "User registered successfully" });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    try {
+      const user = new User({ name, email, password: hashedPassword });
+      await user.save();
+      res.status(201).json({ message: "User registered successfully" });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   }
-});
+);
 
 // ✅ Login with TypeScript-enforced types
 
